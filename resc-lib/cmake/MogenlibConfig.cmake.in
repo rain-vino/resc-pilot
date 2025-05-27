@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+set(MOGENLIB_INCLUDE_DIRS "@CMAKE_INSTALL_PREFIX@/include")
+set(MOGENLIB_LIBRARIES mogenlib)
+
+include(CMakeFindDependencyMacro)
+find_dependency(Eigen3)
+
+include("${CMAKE_CURRENT_LIST_DIR}/MogenlibConfigVersion.cmake")
+
