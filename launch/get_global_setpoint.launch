@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- 
+        Global Setpoint Recorder Node
+        
+        This node captures GPS coordinates and calculates relative ENU positions:
+        1. Automatically captures initial GPS when drone powers on
+        2. Press ENTER to capture target GPS manually
+        3. Calculates relative position in ENU frame (meters)
+        4. Saves data to YAML file for use in other launch files
+        
+        Usage:
+            roslaunch get_global_setpoint_node get_global_setpoint.launch
+            
+        After initial GPS is captured, press ENTER to capture target position.
+    -->
+    
+    <node pkg="get_global_setpoint" type="get_global_setpoint_node" name="get_global_setpoint" output="screen">
+        <!-- Output file path - defaults to px4_utils_land/launch/global_setpoints.yaml -->
+        <param name="output_file" value="$(find px4_utils_land)/launch/global_setpoints.yaml" type="string"/>
+    </node>
+    
+</launch>
