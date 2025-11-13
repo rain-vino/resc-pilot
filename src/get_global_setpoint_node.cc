@@ -49,6 +49,24 @@ public:
         std::string default_path = package_path + "/" + relative_path;
         nh_.param<std::string>("output_file", output_file_, default_path);
 
+        // Read target GPS coordinates from parameters
+        double target_lat, target_lon, target_alt;
+        if (nh_.getParam("target_latitude", target_lat) && 
+            nh_.getParam("target_longitude", target_lon) && 
+            nh_.getParam("target_altitude", target_alt)) {
+            
+            target_gps_.latitude = target_lat;
+            target_gps_.longitude = target_lon;
+            target_gps_.altitude = target_alt;
+            target_gps_.status.status = 0; // Set valid status
+            target_captured_ = true;
+            
+            ROS_INFO("Target GPS loaded from parameters:");
+            ROS_INFO("  Latitude:  %.8f", target_gps_.latitude);
+            ROS_INFO("  Longitude: %.8f", target_gps_.longitude);
+            ROS_INFO("  Altitude:  %.3f m", target_gps_.altitude);
+        }
+
         // Subscribe to GPS topic
         gps_sub_ = nh_.subscribe("/mavros/global_position/global", 10, 
                                  &GlobalSetpointRecorder::gpsCallback, this);
@@ -109,7 +127,7 @@ public:
         enu.y = dlat * EARTH_RADIUS;
         
         // Up: delta_altitude
-        enu.z = target.altitude - ref.altitude;
+        enu.z = target.altitude - ref.altitude + 2.0; // Adding 2.0 to account for altitude offset
         
         return enu;
     }
@@ -204,67 +222,28 @@ public:
             return;
         }
         
-        // Configure terminal for raw input before starting threads
-        struct termios old_tio, new_tio;
-        tcgetattr(STDIN_FILENO, &old_tio);
-        new_tio = old_tio;
-        new_tio.c_lflag &= (~ICANON & ~ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
-        
-        ROS_INFO("Terminal configured for input. Ready to capture target...");
-        
-        // Main loop - handle both ROS callbacks and keyboard input
-        while (ros::ok() && !target_captured_) {
-            // Check for keyboard input (non-blocking)
-            fd_set readfds;
-            FD_ZERO(&readfds);
-            FD_SET(STDIN_FILENO, &readfds);
+        // If target GPS is already loaded from parameters, process immediately
+        if (target_captured_) {
+            ROS_INFO("Using target GPS from parameters - processing immediately...");
             
-            struct timeval tv;
-            tv.tv_sec = 0;
-            tv.tv_usec = 10000; // 10ms timeout
+            // Calculate and display relative position
+            geometry_msgs::Vector3 enu = gpsToENU(initial_gps_, target_gps_);
+            double dist = calculateDistance(initial_gps_, target_gps_);
             
-            int ret = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+            ROS_INFO("\nRelative Position (ENU):");
+            ROS_INFO("  East:  %.3f m", enu.x);
+            ROS_INFO("  North: %.3f m", enu.y);
+            ROS_INFO("  Up:    %.3f m", enu.z);
+            ROS_INFO("  Distance: %.3f m", dist);
             
-            if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
-                char c = getchar();
-                if (c == '\n' || c == '\r') {  // ENTER key
-                    if (initial_captured_) {
-                        target_captured_ = true;
-                        ROS_INFO("\nTarget GPS captured:");
-                        ROS_INFO("  Latitude:  %.8f", target_gps_.latitude);
-                        ROS_INFO("  Longitude: %.8f", target_gps_.longitude);
-                        ROS_INFO("  Altitude:  %.3f m", target_gps_.altitude);
-                        
-                        // Calculate and display relative position
-                        geometry_msgs::Vector3 enu = gpsToENU(initial_gps_, target_gps_);
-                        double dist = calculateDistance(initial_gps_, target_gps_);
-                        
-                        ROS_INFO("\nRelative Position (ENU):");
-                        ROS_INFO("  East:  %.3f m", enu.x);
-                        ROS_INFO("  North: %.3f m", enu.y);
-                        ROS_INFO("  Up:    %.3f m", enu.z);
-                        ROS_INFO("  Distance: %.3f m", dist);
-                        
-                        // Save to file
-                        saveToYAML();
-                        
-                        ROS_INFO("\nPress 'q' to quit or 'r' to capture another target...");
-                        break;
-                    } else {
-                        ROS_WARN("Initial GPS not captured yet!");
-                    }
-                }
-            }
+            // Save to file
+            saveToYAML();
             
-            // Process ROS callbacks
-            ros::spinOnce();
-            rate.sleep();
+            ROS_INFO("Processing complete. Node shutting down...");
+            return;
         }
         
-        // Restore terminal settings
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
-        ROS_INFO("Node shutting down...");
+
     }
     
 };

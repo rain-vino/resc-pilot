@@ -5,19 +5,31 @@
         
         This node captures GPS coordinates and calculates relative ENU positions:
         1. Automatically captures initial GPS when drone powers on
-        2. Press ENTER to capture target GPS manually
-        3. Calculates relative position in ENU frame (meters)
-        4. Saves data to YAML file for use in other launch files
+        2. Option 1: Press ENTER to capture target GPS manually
+        3. Option 2: Load target GPS from parameters (target_latitude, target_longitude, target_altitude)
+        4. Calculates relative position in ENU frame (meters)
+        5. Saves data to YAML file for use in other launch files
         
-        Usage:
-            roslaunch get_global_setpoint_node get_global_setpoint.launch
+        Usage Option 1 (Manual capture):
+            roslaunch get_global_setpoint get_global_setpoint.launch
             
-        After initial GPS is captured, press ENTER to capture target position.
+        Usage Option 2 (From parameters):
+            roslaunch get_global_setpoint get_global_setpoint.launch target_latitude:=31.12345678 target_longitude:=121.87654321 target_altitude:=10.5
+            
+        After initial GPS is captured:
+        - If parameters provided: automatically processes and saves
+        - If no parameters: press ENTER to capture target position manually
     -->
     
     <node pkg="get_global_setpoint" type="get_global_setpoint_node" name="get_global_setpoint" output="screen">
         <!-- Output file path - defaults to px4_utils_land/launch/global_setpoints.yaml -->
         <param name="output_file" value="$(find px4_utils_land)/launch/global_setpoints.yaml" type="string"/>
+        
+        <!-- Target GPS coordinates (optional) - if provided, will be used instead of manual capture -->
+        <!-- Example usage: roslaunch get_global_setpoint get_global_setpoint.launch target_latitude:=31.12345678 target_longitude:=121.87654321 target_altitude:=10.5 -->
+        <param name="target_latitude" value="37.41425450" type="double"/>
+        <param name="target_longitude" value="-122.99587880" type="double"/>
+        <param name="target_altitude" value="-27.496" type="double"/>
     </node>
     
 </launch>
