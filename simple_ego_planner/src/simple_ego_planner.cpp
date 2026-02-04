@@ -8,7 +8,6 @@
 #include <quadrotor_msgs/PositionCommand.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <sensor_msgs/LaserScan.h>
 #include <Eigen/Eigen>
 #include <iostream>
 #include <vector>
@@ -30,8 +29,6 @@ public:
         has_odom_ = false;
         has_target_ = false;
         is_in_vertical_phase_ = false;
-        latest_scan_ = nullptr;
-        last_scan_time_ = ros::Time(0);
         
         // Create timer
         plan_timer_ = nh_.createTimer(ros::Duration(0.05), &SimpleEgoPlanner::planTimerCallback, this);
@@ -71,11 +68,7 @@ private:
     bool has_odom_;
     bool has_target_;
     bool is_in_vertical_phase_;  // Whether in vertical descent phase
-    
-    // LiDAR data
-    sensor_msgs::LaserScan::ConstPtr latest_scan_;  // Latest LiDAR data
-    ros::Time last_scan_time_;  // Last time LiDAR data was received
-    
+        
     // Current state
     Eigen::Vector3d current_pos_;
     Eigen::Vector3d current_vel_;
@@ -94,7 +87,6 @@ private:
     double goal_tolerance_;    // Goal tolerance
     double dt_;               // Time step
     double publish_rate_;     // Publish rate
-    double range_threshold_;  // New parameter for range threshold
     
     void initParameters()
     {
@@ -103,7 +95,6 @@ private:
         nh_.param("goal_tolerance", goal_tolerance_, 0.5);
         nh_.param("dt", dt_, 0.1);
         nh_.param("publish_rate", publish_rate_, 20.0);
-        nh_.param("range_threshold", range_threshold_, 2.0);  // New parameter for range threshold
         
         ROS_INFO("[SimpleEgoPlanner] Parameters loaded:");
         ROS_INFO("  max_vel: %.2f m/s", max_vel_);
@@ -124,7 +115,6 @@ private:
         // Subscribers - use same topics as PX4CtrlFSM
         odom_sub_ = nh_.subscribe("/mavros/local_position/pose", 1, &SimpleEgoPlanner::odomCallback, this);
         target_sub_ = nh_.subscribe("/move_base_simple/goal", 1, &SimpleEgoPlanner::targetCallback, this);
-        lidar_sub_ = nh_.subscribe("/scan", 1, &SimpleEgoPlanner::lidarCallback, this);  // Subscribe to LiDAR data
         
         // Publishers - publish to topics expected by PX4CtrlFSM
         pos_cmd_pub_ = nh_.advertise<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10);
@@ -169,39 +159,6 @@ private:
         
         // Visualize target point
         publishGoalVisualization();
-    }
-    
-    void lidarCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
-    {
-        // Store latest LiDAR data
-        latest_scan_ = msg;
-        last_scan_time_ = ros::Time::now();
-    }
-    
-    bool checkHeightForTargetReached()
-    {
-        // Check if we have latest LiDAR data
-        if (!latest_scan_ || !is_in_vertical_phase_)
-            return false;
-            
-        // Check if data is fresh enough (within 1 second)
-        if ((ros::Time::now() - last_scan_time_).toSec() > 1.0)
-        {
-            ROS_WARN("[SimpleEgoPlanner] Laser scan data is too old!");
-            return false;
-        }
-        
-        // Check if any distance in ranges array is less than 2.0m
-        for (const auto& range : latest_scan_->ranges)
-        {
-            if (range > 0.1 && range < range_threshold_)  // Filter out invalid data, check valid distances
-            {
-                ROS_INFO("[SimpleEgoPlanner] Target reached! Height: %.2fm. Ready for GPS correction.", range);
-                return true;
-            }
-        }
-        
-        return false;
     }
     
     void planTimerCallback(const ros::TimerEvent& /*event*/)
@@ -624,7 +581,7 @@ private:
         }
         
         // Check height sensor during vertical descent phase
-        if (is_in_vertical_phase_ && checkHeightForTargetReached())
+        if (is_in_vertical_phase_)
         {
             // Altimeter distance < 2.0m indicates reaching target
             current_state_ = IDLE;
